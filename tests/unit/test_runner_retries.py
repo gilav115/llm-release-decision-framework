@@ -1,7 +1,6 @@
 import time
 
 from rdf.adapters.base import AssistantAdapter
-from rdf.errors import AdapterExecutionError, ScenarioTimeoutError
 from rdf.execution.runner import DefaultRunner
 from rdf.judging.llm_judge import RuleBasedJudge
 from rdf.models import AssistantResponse, ConversationScenario, ConversationTurn, EvaluationCriterion, UserProfile
@@ -71,31 +70,29 @@ def test_runner_retries_adapter_failure() -> None:
     assert runs[0].metadata["attempt"] == 2
 
 
-def test_runner_raises_when_retries_exhausted() -> None:
+def test_runner_records_error_when_retries_exhausted() -> None:
     adapter = FlakyAdapter()
     runner = DefaultRunner(adapter=adapter, judge=RuleBasedJudge(), max_retries=0, scenario_timeout_sec=10)
-    try:
-        runner.run([_scenario()])
-        assert False, "Expected AdapterExecutionError"
-    except AdapterExecutionError:
-        assert True
+    runs = runner.run([_scenario()])
+    assert len(runs) == 1
+    assert runs[0].judge_result is None
+    assert runs[0].metadata["status"] == "error"
+    assert runs[0].metadata["error_type"] == "AdapterExecutionError"
 
 
 def test_runner_times_out_blocking_turn_call() -> None:
     adapter = HangingAdapter()
     runner = DefaultRunner(adapter=adapter, judge=RuleBasedJudge(), max_retries=0, scenario_timeout_sec=0.1)
-    try:
-        runner.run([_scenario()])
-        assert False, "Expected ScenarioTimeoutError"
-    except ScenarioTimeoutError:
-        assert True
+    runs = runner.run([_scenario()])
+    assert len(runs) == 1
+    assert runs[0].judge_result is None
+    assert runs[0].metadata["status"] == "error"
+    assert runs[0].metadata["error_type"] == "ScenarioTimeoutError"
 
 
 def test_runner_always_calls_end_conversation_on_failure() -> None:
     adapter = CleanupTrackingAdapter()
     runner = DefaultRunner(adapter=adapter, judge=RuleBasedJudge(), max_retries=0, scenario_timeout_sec=10)
-    try:
-        runner.run([_scenario()])
-        assert False, "Expected AdapterExecutionError"
-    except AdapterExecutionError:
-        assert adapter.ended is True
+    runs = runner.run([_scenario()])
+    assert runs[0].metadata["status"] == "error"
+    assert adapter.ended is True

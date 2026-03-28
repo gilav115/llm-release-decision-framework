@@ -1,24 +1,25 @@
 # System Overview
 
-The framework evaluates conversational assistants via realistic multi-turn scenarios, then returns a release decision (`pass`, `warn`, `block`).
+This repo runs conversation test cases and returns one release decision: `pass`, `warn`, or `block`.
 
 ## Pipeline
 
-1. Load and validate scenarios.
-2. Run each scenario with an assistant adapter.
-3. Judge each completed conversation.
-4. Aggregate scenario outcomes.
-5. Apply gate policy for final decision.
-6. Persist artifacts for auditability.
+1. Load scenario files and validate them.
+2. Keep valid scenarios and capture load errors for invalid files.
+3. Run each valid scenario through an adapter (the adapter talks to the chatbot).
+4. Judge completed conversations against scenario criteria.
+5. Record scenario execution errors without aborting the full run.
+6. Apply gate policy rules to all scenario results.
+7. Write run artifacts to disk (including error artifacts).
 
 ## Responsibilities by layer
 
-- Scenario loader: parse files, enforce required schema checks, return typed scenario objects.
-- Adapter: send scenario turns to the assistant under test and return normalized responses.
-- Runner: orchestrate retries, timeout behavior, and concurrency.
-- Judge: convert transcript/response data into criterion-level pass/fail + score output.
-- Gate: apply policy rules to scenario results and produce final `pass`/`warn`/`block`.
-- Storage/reporting: write machine-readable artifacts and human-readable summary output.
+- Loader: reads scenario files and enforces schema/ID validation.
+- Adapter: sends user turns to the assistant system and returns assistant responses.
+- Runner: handles retries, timeout, concurrency, and transcript building.
+- Judge: turns transcript/responses into criterion results and scenario pass/fail.
+- Gate: maps scenario results to final decision using policy rules.
+- Storage/reporting: writes JSON artifacts and markdown summary.
 
 ## Current demo boundaries
 
@@ -28,6 +29,7 @@ The framework evaluates conversational assistants via realistic multi-turn scena
 
 ## Practical read path after a run
 
-1. `summary.md`: quick human snapshot.
-2. `release_decision.json`: final status and triggered rules.
-3. `scenario_runs.json`: per-scenario transcript, scoring, and retry metadata.
+1. `summary.md`: quick status view.
+2. `release_decision.json`: final decision and triggered rules.
+3. `scenario_runs.json`: detailed per-scenario evidence.
+4. `run_stats.json`: performance and rate metrics.

@@ -29,11 +29,17 @@ class FilesystemStorage:
         scenario_runs: list[ScenarioRun],
         release_decision: ReleaseDecision,
         summary_markdown: str,
+        run_errors: list[dict] | None = None,
+        run_stats: dict | None = None,
     ) -> None:
         """Persist machine-readable and human-readable outputs for one run."""
+        run_errors = run_errors or []
+        run_stats = run_stats or {}
         (run_dir / "run_config.json").write_text(json.dumps(run_config, indent=2))
         (run_dir / "scenario_runs.json").write_text(json.dumps([asdict(r) for r in scenario_runs], indent=2))
         (run_dir / "release_decision.json").write_text(json.dumps(asdict(release_decision), indent=2))
         (run_dir / "summary.md").write_text(summary_markdown)
         all_events = [asdict(e) for run in scenario_runs for e in run.system_events]
         (run_dir / "system_events.json").write_text(json.dumps(all_events, indent=2))
+        (run_dir / "run_errors.json").write_text(json.dumps(run_errors, indent=2))
+        (run_dir / "run_stats.json").write_text(json.dumps(run_stats, indent=2))

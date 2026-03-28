@@ -1,6 +1,6 @@
 # Scenarios Directory
 
-This folder contains conversation scenarios used for evaluation runs.
+This folder contains scenario files used as test inputs.
 
 ## File format
 
@@ -21,5 +21,6 @@ Files use `.yaml` extension and are authored as JSON-formatted YAML for compatib
 
 ## Important runtime behavior
 
-- The runner sends every authored `turn` to the adapter.
-- Assistant turns should not be authored in files; the runner adds assistant turns to the transcript after each adapter response.
+- The runner sends each authored turn to the adapter as an input message.
+- The runner then appends the returned assistant message to transcript automatically.
+- Do not author assistant turns in scenario files.

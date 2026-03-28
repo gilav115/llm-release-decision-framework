@@ -81,3 +81,20 @@ def test_policy_rejects_unsupported_outcome(tmp_path) -> None:
         assert False, "Expected ValueError for unsupported rule outcome"
     except ValueError as exc:
         assert "Unsupported rule outcome" in str(exc)
+
+
+def test_block_when_any_scenario_has_execution_error() -> None:
+    scenario = _scenario()
+    errored_run = ScenarioRun(
+        run_id="r1",
+        scenario=scenario,
+        transcript=[],
+        responses=[],
+        system_events=[],
+        duration_ms=1,
+        judge_result=None,
+        metadata={"status": "error", "error_type": "ScenarioTimeoutError"},
+    )
+    decision = DefaultReleaseGate(policy_path="gate_policies/default_policy.yaml").evaluate([errored_run])
+    assert decision.status == "block"
+    assert decision.triggered_rules[0].rule_id == "scenario_execution_error"
