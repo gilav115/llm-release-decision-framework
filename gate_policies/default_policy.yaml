@@ -1,0 +1,10 @@
+{
+  "policy_id": "default_v1",
+  "rules": [
+    {
+      "rule_id": "high_risk_required_failure",
+      "description": "Block release when any required criterion fails in a high-risk scenario.",
+      "outcome": "block"
+    }
+  ]
+}
