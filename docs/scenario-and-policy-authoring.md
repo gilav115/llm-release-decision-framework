@@ -95,10 +95,12 @@ Rule outcome values:
 - Supported decision values are `pass`, `warn`, and `block`.
 
 Current implementation note:
-- Unknown `rule_id` entries are ignored by the demo gate logic (no-op), so typos in rule ids will silently have no effect.
+- Unknown `rule_id` entries are rejected during policy load.
+- Unsupported `outcome` values are also rejected during policy load.
 
 Authoring implication:
 - Keep your policy file limited to currently supported rule ids unless you have added matching code in `src/rdf/gates/release_gate.py`.
+- Treat policy load failures as configuration errors that must be fixed before the run can proceed.
 
 ### Minimal valid policy example
 

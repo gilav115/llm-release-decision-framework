@@ -37,6 +37,7 @@ This repo is intentionally minimal. It is useful for architecture and workflow l
 - The release gate logic (`DefaultReleaseGate`) only has explicit behavior for one configured rule id: `high_risk_required_failure`.
 - During execution, the runner loops through every authored item in `scenario.turns` and sends each one to `adapter.send_turn(...)`. For that reason, authored turns should be user messages.
 - After each adapter response, the runner appends a synthetic assistant turn to the transcript so judging/reporting can inspect full dialogue history.
+- The runner enforces per-scenario timeout boundaries for adapter turn calls and always attempts adapter cleanup (`end_conversation`) in a `finally` path.
 - If a scenario still fails after retries, the exception is raised and the run exits; the current flow does not persist partial successful scenario outputs.
 
 ## What a decision means
@@ -46,7 +47,7 @@ This repo is intentionally minimal. It is useful for architecture and workflow l
 - `block`: at least one blocking rule triggered.
 
 Important edge case:
-- If zero scenarios are loaded, current logic can still return `pass`. Treat this as a configuration problem, not a real success.
+- If the scenario directory contains no `.yaml` files, the loader now raises `ScenarioValidationError` and the run stops.
 
 ## What gets produced
 
@@ -60,11 +61,11 @@ See `docs/run-artifacts.md` for field-level detail.
 
 ## Common failure modes
 
-- Wrong scenario path: loader finds no files and you may get a misleading `pass`.
+- Wrong scenario path: loader raises `ScenarioValidationError` when no `.yaml` files are found.
 - Invalid scenario schema: loader raises `ScenarioValidationError` (for example duplicate ids or missing required fields).
 - Adapter/runtime issues: runner retries up to `--max-retries`, then fails the run.
 - Timeout: scenario exceeding `--scenario-timeout-sec` fails immediately (no further retries for that scenario).
-- Policy typo: unknown `rule_id` is ignored by current demo gate behavior.
+- Policy typo: unsupported `rule_id` or `outcome` now fails fast during policy load with `ValueError`.
 
 ## Scenario/policy file format
 

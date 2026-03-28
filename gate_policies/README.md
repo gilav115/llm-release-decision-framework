@@ -21,5 +21,5 @@ Policies use `.yaml` extension and are authored as JSON-formatted YAML for compa
 
 ## Important implementation behavior
 
-- If a `rule_id` in policy does not match a supported rule in code, it is ignored by current demo logic.
-- This means misspelled rule ids do not fail fast; they silently do nothing.
+- If a `rule_id` in policy does not match a supported rule in code, policy load fails with `ValueError`.
+- If `outcome` is not one of `pass`, `warn`, `block`, policy load fails with `ValueError`.
