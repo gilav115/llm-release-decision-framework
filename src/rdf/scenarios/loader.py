@@ -83,21 +83,59 @@ def _from_dict(data: dict[str, Any]) -> ConversationScenario:
 
 
 def load_scenarios(path: str | Path) -> list[ConversationScenario]:
-    """Load and validate all `.yaml` scenarios under a directory tree."""
+    """Load scenarios in strict mode.
+
+    Strict mode raises if any scenario file is invalid or if no files exist.
+    """
+    scenarios, errors = load_scenarios_with_errors(path)
+    if errors:
+        first = errors[0]
+        location = first["file"]
+        message = first["error_message"]
+        raise ScenarioValidationError(f"{location}: {message}")
+    return scenarios
+
+
+def load_scenarios_with_errors(path: str | Path) -> tuple[list[ConversationScenario], list[dict[str, str]]]:
+    """Load scenarios in tolerant mode.
+
+    Returns:
+    - valid scenarios
+    - per-file errors (loader continues after individual file failures)
+    """
     root = Path(path)
     files = sorted(root.rglob("*.yaml"))
+    errors: list[dict[str, str]] = []
     if not files:
-        raise ScenarioValidationError(f"No scenario files found under: {root}")
+        errors.append(
+            {
+                "stage": "load",
+                "file": str(root),
+                "error_type": "ScenarioValidationError",
+                "error_message": "No scenario files found",
+            }
+        )
+        return [], errors
 
     scenarios: list[ConversationScenario] = []
     seen_ids: set[str] = set()
 
     for file in files:
-        payload = _parse_structured_text(file.read_text())
-        scenario = _from_dict(payload)
-        if scenario.scenario_id in seen_ids:
-            raise ScenarioValidationError(f"Duplicate scenario_id: {scenario.scenario_id}")
-        seen_ids.add(scenario.scenario_id)
-        scenarios.append(scenario)
+        try:
+            payload = _parse_structured_text(file.read_text())
+            scenario = _from_dict(payload)
+            if scenario.scenario_id in seen_ids:
+                raise ScenarioValidationError(f"Duplicate scenario_id: {scenario.scenario_id}")
+            seen_ids.add(scenario.scenario_id)
+            scenarios.append(scenario)
+        except Exception as exc:
+            errors.append(
+                {
+                    "stage": "load",
+                    "file": str(file),
+                    "error_type": exc.__class__.__name__,
+                    "error_message": str(exc),
+                }
+            )
 
-    return scenarios
+    return scenarios, errors

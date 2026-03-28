@@ -1,12 +1,12 @@
 # Release Decision Framework
 
-This system helps teams decide whether a conversational feature is ready to release.
+This repo helps you test a chatbot feature before release.
 
-This repository is intentionally a **demo and educational implementation**. It keeps the architecture clean and modular so teams can understand the flow quickly, then replace components (adapter, judge, gate) as their production needs evolve.
+It is a **demo implementation**: good for learning and pilot runs, not full production hardening.
 
 ## Start here
 
-If you are new to this repo, this is the shortest path:
+If this is your first time here:
 
 1. Run the quickstart command.
 2. Open the newest folder under `run_history/`.
@@ -28,17 +28,27 @@ PYTHONPATH=src python3 -m rdf.cli.main \
   --output run_history
 ```
 
-## What this demo does today
+## What this repo does
 
-This repo is intentionally minimal. It is useful for architecture and workflow learning, but not yet production-ready evaluation quality.
+For each scenario file:
+- The runner sends each authored turn to an adapter.
+- The adapter returns an assistant message.
+- The judge scores the conversation against scenario criteria.
+- The gate applies policy rules and returns `pass`, `warn`, or `block`.
+- Artifacts are written to `run_history/<timestamp>_run-001/`.
 
-- The CLI constructs `MockAssistantAdapter` (`src/rdf/adapters/mock_assistant.py`), which returns hardcoded responses based on simple keyword matching.
-- The CLI constructs `RuleBasedJudge` from `src/rdf/judging/llm_judge.py`. Despite the filename, this class does not call an LLM API; it uses deterministic string heuristics.
-- The release gate logic (`DefaultReleaseGate`) only has explicit behavior for one configured rule id: `high_risk_required_failure`.
-- During execution, the runner loops through every authored item in `scenario.turns` and sends each one to `adapter.send_turn(...)`. For that reason, authored turns should be user messages.
-- After each adapter response, the runner appends a synthetic assistant turn to the transcript so judging/reporting can inspect full dialogue history.
-- The runner enforces per-scenario timeout boundaries for adapter turn calls and always attempts adapter cleanup (`end_conversation`) in a `finally` path.
-- If a scenario still fails after retries, the exception is raised and the run exits; the current flow does not persist partial successful scenario outputs.
+Default demo components:
+- Adapter: `MockAssistantAdapter` (deterministic keyword-based responses).
+- Judge: `RuleBasedJudge` in `src/rdf/judging/llm_judge.py` (heuristics, no LLM API call).
+- Gate: `DefaultReleaseGate` with rule support for `high_risk_required_failure`.
+
+Current runtime behavior:
+- Scenario turns should be user turns (`speaker: "user"`).
+- Assistant turns are generated during execution and appended to transcript.
+- Per-scenario timeout is enforced, including around blocking `send_turn(...)` calls.
+- `end_conversation(...)` is always attempted in a `finally` block.
+- If a scenario fails after retries, the run records that scenario as an error and continues with other scenarios.
+- Run artifacts are still written, including both successful and failed scenario records.
 
 ## What a decision means
 
@@ -46,8 +56,7 @@ This repo is intentionally minimal. It is useful for architecture and workflow l
 - `warn`: no blocking policy rule triggered, but at least one scenario failed.
 - `block`: at least one blocking rule triggered.
 
-Important edge case:
-- If the scenario directory contains no `.yaml` files, the loader now raises `ScenarioValidationError` and the run stops.
+If no scenario `.yaml` files are found, CLI records a load error in `run_errors.json` and final decision is blocked.
 
 ## What gets produced
 
@@ -56,15 +65,18 @@ Important edge case:
 - `release_decision.json` — final decision and triggered rules.
 - `summary.md` — human-readable one-minute summary.
 - `system_events.json` — flattened optional runtime events.
+- `run_errors.json` — load-time and execution-time errors captured during the run.
+- `run_stats.json` — structured performance and rate metrics for the run.
 
 See `docs/run-artifacts.md` for field-level detail.
 
 ## Common failure modes
 
-- Wrong scenario path: loader raises `ScenarioValidationError` when no `.yaml` files are found.
-- Invalid scenario schema: loader raises `ScenarioValidationError` (for example duplicate ids or missing required fields).
-- Adapter/runtime issues: runner retries up to `--max-retries`, then fails the run.
-- Timeout: scenario exceeding `--scenario-timeout-sec` fails immediately (no further retries for that scenario).
+- Wrong scenario path: CLI records load errors and blocks final decision.
+- Invalid scenario schema: invalid files are recorded as load errors; valid files still run.
+- Invalid CLI values: argument parser rejects bad values (`--max-concurrency <= 0`, `--scenario-timeout-sec <= 0`, `--max-retries < 0`).
+- Adapter/runtime issues: runner retries up to `--max-retries`, then records scenario error if still failing.
+- Timeout: scenario exceeding `--scenario-timeout-sec` is recorded as scenario error.
 - Policy typo: unsupported `rule_id` or `outcome` now fails fast during policy load with `ValueError`.
 
 ## Scenario/policy file format
@@ -73,13 +85,13 @@ Scenario and policy files use `.yaml`, but this demo stores them as JSON-formatt
 
 If `PyYAML` is installed, the loader accepts standard YAML syntax too.
 
-## From demo to production checklist
+## From demo to production
 
 1. Replace `MockAssistantAdapter` with a real provider adapter.
 2. Replace `RuleBasedJudge` with a robust evaluation method.
-3. Add stricter policy validation (reject unknown rule ids).
-4. Add CI checks for scenario/policy linting.
-5. Add regression baselines and trend tracking.
+3. Add artifact redaction/data retention controls for sensitive content.
+4. Persist artifacts even when policy loading fails.
+5. Add CI checks and regression trend tracking.
 
 ## Repository docs
 

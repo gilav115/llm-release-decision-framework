@@ -80,6 +80,22 @@ class DefaultReleaseGate(ReleaseGate):
 
     def evaluate(self, scenario_runs: list[ScenarioRun]) -> ReleaseDecision:
         """Apply configured rules and return a final release decision."""
+        errored_runs = [run for run in scenario_runs if run.metadata.get("status") == "error" or run.judge_result is None]
+        if errored_runs:
+            return ReleaseDecision(
+                status="block",
+                summary="Release blocked: one or more scenarios failed during execution.",
+                triggered_rules=[
+                    TriggeredRule(
+                        rule_id="scenario_execution_error",
+                        outcome="block",
+                        reason=f"{run.scenario.scenario_id}:{run.metadata.get('error_type', 'UnknownError')}",
+                    )
+                    for run in errored_runs
+                ],
+                metadata={"policy_id": self.policy_id, "errored_scenarios": len(errored_runs)},
+            )
+
         triggered: list[TriggeredRule] = []
 
         for rule in self.rules:

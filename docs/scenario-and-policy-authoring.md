@@ -1,11 +1,14 @@
 # Scenario and Policy Authoring Guide
 
-This guide explains how to author files in `scenarios/` and `gate_policies/` for the demo.
-It focuses on what is actually enforced today.
+This guide explains exactly what to put in:
+- `scenarios/*.yaml`
+- `gate_policies/*.yaml`
+
+It describes current code behavior (not future plans).
 
 ## Scenario files
 
-Location pattern:
+Suggested path:
 - `scenarios/<domain>/<scenario_name>.yaml`
 
 Required fields:
@@ -14,22 +17,28 @@ Required fields:
 - `turns` (at least one turn)
 - `criteria` (at least one criterion)
 
-Validation rules enforced by loader:
+Validation enforced by loader:
 - `scenario_id` unique across loaded files
 - `turn_id` unique per scenario
 - `criterion_id` unique per scenario
 - criterion `weight` is between `0.0` and `1.0`
+- at least one scenario file must exist in the selected scenario directory
 
-How `turns` are consumed at runtime:
+CLI behavior with invalid files:
+- CLI uses tolerant loading mode.
+- Invalid scenario files are captured in `run_errors.json`.
+- Valid scenario files still run.
+
+How runtime uses `turns`:
 - The runner iterates through `scenario.turns` in order.
 - For each turn object, it calls `adapter.send_turn(context, turn)`.
 - It then appends a generated assistant turn to the transcript using the adapter response text.
 
-Authoring implication:
+What this means for authoring:
 - Treat each authored turn as a user prompt (`speaker: "user"`).
 - Do not include assistant turns in scenario files. Assistant turns are generated during execution.
 
-Additional practical expectations:
+Recommended authoring choices:
 - `risk_level` should be one of `low`, `medium`, `high`.
 - Criterion weights should typically sum to `1.0` for understandable scoring.
 - Keep `scenario_id` stable over time so run histories remain comparable.
@@ -83,10 +92,10 @@ Required fields:
 - `policy_id`
 - `rules` list
 
-Current supported rule id:
+Currently supported rule id:
 - `high_risk_required_failure`
 
-Behavior:
+Current rule behavior:
 - For each high-risk scenario run, the gate checks each criterion result.
 - If a criterion is marked `required: true` and its result is `passed: false`, that scenario triggers the rule.
 - If any trigger has outcome `block`, final decision is `block`.
@@ -94,11 +103,12 @@ Behavior:
 Rule outcome values:
 - Supported decision values are `pass`, `warn`, and `block`.
 
-Current implementation note:
-- Unknown `rule_id` entries are rejected during policy load.
-- Unsupported `outcome` values are also rejected during policy load.
+Validation enforced by gate loader:
+- Unknown `rule_id` is rejected during policy load.
+- Unsupported `outcome` is rejected during policy load.
+- Missing/empty `rules` list is rejected during policy load.
 
-Authoring implication:
+What this means for authoring:
 - Keep your policy file limited to currently supported rule ids unless you have added matching code in `src/rdf/gates/release_gate.py`.
 - Treat policy load failures as configuration errors that must be fixed before the run can proceed.
 
@@ -117,13 +127,14 @@ Authoring implication:
 }
 ```
 
-### Common policy mistakes
+### Common policy mistakes (and what happens)
 
-- Misspelling `rule_id` and expecting it to run.
-- Assuming policy currently supports threshold-style rules (it does not, yet).
-- Using unclear `policy_id` values that make audit trails hard to read.
+- Misspelling `rule_id` -> run fails at policy load.
+- Using unsupported `outcome` -> run fails at policy load.
+- Assuming threshold-style rules exist -> they do not in current gate code.
+- Using unclear `policy_id` -> artifacts are harder to audit later.
 
-## Note on YAML format in this demo
+## File format note
 
 Files are stored as JSON-formatted YAML to keep execution deterministic in environments where third-party packages cannot be installed.
 

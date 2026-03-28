@@ -1,6 +1,6 @@
 # Run Artifacts
 
-This document explains what each run artifact means and why it exists.
+This document explains each output file from one run and how to use it.
 
 ## Folder naming
 
@@ -15,7 +15,7 @@ Example:
 ## Files
 
 ### `run_config.json`
-Records runtime inputs for reproducibility.
+Records runtime inputs.
 
 Typical fields:
 - `scenario_path`
@@ -24,27 +24,28 @@ Typical fields:
 - `scenario_timeout_sec`
 - `max_retries`
 
-Use this first when a run result looks suspicious. It confirms what inputs were actually used.
+Use this first when results look wrong. It tells you exactly which inputs were used.
 
 ### `scenario_runs.json`
-Contains one object per scenario execution.
+Contains one object per scenario.
 
-Key sections:
+Main sections:
 - `scenario`: source scenario metadata and criteria.
 - `transcript`: user + assistant turns captured during execution.
 - `responses`: adapter response objects.
 - `system_events`: optional adapter/runtime signals.
 - `duration_ms`: runtime duration.
-- `judge_result`: structured scoring and pass/fail output.
-- `metadata`: execution annotations (for example retry attempt).
+- `judge_result`: structured scoring and pass/fail output (null when scenario execution failed).
+- `metadata`: execution annotations (for example retry attempt, completion/error status, error type/message).
 
-What to inspect quickly:
+Quick checks:
 - `judge_result.passed` and `judge_result.overall_score`
 - any required criteria with `passed: false`
 - `metadata.attempt` to see whether retries were used
+- `metadata.status` to see `completed` vs `error`
 
 ### `release_decision.json`
-Final release outcome from the gate.
+Final run decision from gate policy logic.
 
 Fields:
 - `status` (`pass`/`warn`/`block`)
@@ -52,19 +53,57 @@ Fields:
 - `triggered_rules`
 - `metadata` (for example policy id)
 
-`triggered_rules` is the best place to understand why a decision became `block` or `warn`.
+`triggered_rules` is the first place to look when decision is `block` or `warn`.
 
 ### `summary.md`
 Short, human-readable run summary for quick sharing.
 
-This is useful for status updates, but debugging should use the JSON artifacts above.
+Use this for status updates. Use JSON files for debugging.
 
 ### `system_events.json`
 Flattened event stream across all scenario runs.
 Useful for debugging adapter/runtime behavior.
 
+### `run_errors.json`
+List of non-fatal errors captured during run:
+- scenario file load errors
+- scenario execution errors
+
+This file is useful for understanding partial-failure runs.
+
+### `run_stats.json`
+Structured run metrics used by callers for monitoring and comparisons.
+
+Top-level sections:
+- `counts`
+- `rates`
+- `performance`
+
+`counts` fields:
+- `scenario_inputs_total`: loaded scenarios + load-error files
+- `scenarios_loaded`
+- `load_errors`
+- `scenarios_passed`
+- `scenarios_failed`
+- `scenarios_errored`
+- `execution_errors`
+- `turns_executed`
+
+`rates` fields:
+- `success_rate_loaded_pct`: `scenarios_passed / scenarios_loaded * 100`
+- `failure_rate_loaded_pct`: `(scenarios_failed + scenarios_errored) / scenarios_loaded * 100`
+- `load_error_rate_input_pct`: `load_errors / scenario_inputs_total * 100`
+- `scenarios_per_second`: `scenarios_loaded / total_execution_seconds`
+- `turns_per_second`: `turns_executed / total_execution_seconds`
+
+`performance` fields:
+- `total_execution_ms`: wall-clock runtime for the CLI evaluation flow
+- `scenario_execution_ms`: summary stats for per-scenario duration (`avg/p50/p95/min/max`)
+- `question_execution_ms`: summary stats for per-turn execution time (`avg/p50/p95/min/max`)
+
 ## Artifact interpretation caveats
 
-- If the run crashes before persistence, artifact files may be missing.
-- A `pass` decision does not always mean your setup was meaningful; verify scenario count and scenario quality.
-- `summary.md` is derived from artifacts and should not be treated as the source of truth.
+- If policy loading fails before run setup completes, artifact files may be missing.
+- A `pass` means policy conditions were satisfied. It does not prove scenario quality.
+- `summary.md` is derived output, not source-of-truth data.
+- Question execution metrics are measured from adapter turn dispatch start to response return.
