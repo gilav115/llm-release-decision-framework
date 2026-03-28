@@ -1,0 +1,8 @@
+name: Drift
+on: [workflow_dispatch]
+jobs:
+  drift-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Drift analysis placeholder for selected historical runs"
