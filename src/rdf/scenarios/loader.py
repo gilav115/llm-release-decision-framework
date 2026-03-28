@@ -86,6 +86,9 @@ def load_scenarios(path: str | Path) -> list[ConversationScenario]:
     """Load and validate all `.yaml` scenarios under a directory tree."""
     root = Path(path)
     files = sorted(root.rglob("*.yaml"))
+    if not files:
+        raise ScenarioValidationError(f"No scenario files found under: {root}")
+
     scenarios: list[ConversationScenario] = []
     seen_ids: set[str] = set()
 

@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from rdf.models import ReleaseDecision, ScenarioRun, TriggeredRule
+from rdf.models import DecisionStatus, ReleaseDecision, ScenarioRun, TriggeredRule
 
 try:
     import yaml  # type: ignore
@@ -24,7 +24,7 @@ except Exception:  # pragma: no cover - optional dependency
 class PolicyRule:
     rule_id: str
     description: str
-    outcome: str
+    outcome: DecisionStatus
 
 
 class ReleaseGate(ABC):
@@ -35,6 +35,8 @@ class ReleaseGate(ABC):
 
 class DefaultReleaseGate(ReleaseGate):
     """Policy-driven gate with first rule: high-risk required failure => block."""
+    SUPPORTED_RULE_IDS = {"high_risk_required_failure"}
+    SUPPORTED_OUTCOMES = {"pass", "warn", "block"}
 
     def __init__(self, policy_path: str = "gate_policies/default_policy.yaml") -> None:
         self.policy_path = policy_path
@@ -49,7 +51,31 @@ class DefaultReleaseGate(ReleaseGate):
             raise ValueError("Gate policy must be a mapping/object")
 
         policy_id = str(data.get("policy_id", "default_v1"))
-        rules = [PolicyRule(**item) for item in data.get("rules", [])]
+        raw_rules = data.get("rules")
+        if not isinstance(raw_rules, list) or not raw_rules:
+            raise ValueError("Gate policy must define a non-empty 'rules' list")
+
+        rules: list[PolicyRule] = []
+        for idx, item in enumerate(raw_rules):
+            if not isinstance(item, dict):
+                raise ValueError(f"Rule at index {idx} must be a mapping/object")
+
+            missing = {"rule_id", "description", "outcome"} - set(item.keys())
+            if missing:
+                missing_fields = ", ".join(sorted(missing))
+                raise ValueError(f"Rule at index {idx} missing required field(s): {missing_fields}")
+
+            rule_id = str(item["rule_id"])
+            outcome = str(item["outcome"])
+            description = str(item["description"])
+
+            if rule_id not in self.SUPPORTED_RULE_IDS:
+                raise ValueError(f"Unsupported rule_id: {rule_id}")
+            if outcome not in self.SUPPORTED_OUTCOMES:
+                raise ValueError(f"Unsupported rule outcome: {outcome}")
+
+            rules.append(PolicyRule(rule_id=rule_id, description=description, outcome=outcome))
+
         return policy_id, rules
 
     def evaluate(self, scenario_runs: list[ScenarioRun]) -> ReleaseDecision:

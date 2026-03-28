@@ -24,7 +24,7 @@ The framework evaluates conversational assistants via realistic multi-turn scena
 
 - Adapter in default CLI flow is `MockAssistantAdapter`, which returns deterministic keyword-based responses.
 - Judge in default CLI flow is `RuleBasedJudge`, which applies deterministic text heuristics and does not call a model API.
-- Gate in default CLI flow has explicit logic for `high_risk_required_failure`; unknown rule ids in policy are ignored.
+- Gate in default CLI flow has explicit logic for `high_risk_required_failure`; unsupported policy rule ids/outcomes fail during policy load.
 
 ## Practical read path after a run
 

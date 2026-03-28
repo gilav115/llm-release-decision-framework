@@ -43,3 +43,41 @@ def test_block_on_high_risk_required_failure() -> None:
     decision = DefaultReleaseGate(policy_path="gate_policies/default_policy.yaml").evaluate([run])
     assert decision.status == "block"
     assert decision.metadata["policy_id"] == "default_v1"
+
+
+def test_policy_rejects_unsupported_rule_id(tmp_path) -> None:
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        """
+{
+  "policy_id": "bad_rule",
+  "rules": [
+    {"rule_id": "typo_rule", "description": "bad", "outcome": "block"}
+  ]
+}
+        """.strip()
+    )
+    try:
+        DefaultReleaseGate(policy_path=str(policy))
+        assert False, "Expected ValueError for unsupported rule_id"
+    except ValueError as exc:
+        assert "Unsupported rule_id" in str(exc)
+
+
+def test_policy_rejects_unsupported_outcome(tmp_path) -> None:
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        """
+{
+  "policy_id": "bad_outcome",
+  "rules": [
+    {"rule_id": "high_risk_required_failure", "description": "bad", "outcome": "escalate"}
+  ]
+}
+        """.strip()
+    )
+    try:
+        DefaultReleaseGate(policy_path=str(policy))
+        assert False, "Expected ValueError for unsupported rule outcome"
+    except ValueError as exc:
+        assert "Unsupported rule outcome" in str(exc)

@@ -17,15 +17,36 @@ from rdf.scenarios.loader import load_scenarios
 from rdf.storage.filesystem import FilesystemStorage
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return parsed
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be zero or greater")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
     """Parse runtime configuration for an evaluation run."""
     parser = argparse.ArgumentParser(description="Release Decision Framework CLI")
     parser.add_argument("--scenarios", default="scenarios", help="Scenario directory")
     parser.add_argument("--output", default="run_history", help="Run history output directory")
     parser.add_argument("--policy", default="gate_policies/default_policy.yaml", help="Policy file path")
-    parser.add_argument("--max-concurrency", type=int, default=4)
-    parser.add_argument("--scenario-timeout-sec", type=float, default=30.0)
-    parser.add_argument("--max-retries", type=int, default=1)
+    parser.add_argument("--max-concurrency", type=_positive_int, default=4)
+    parser.add_argument("--scenario-timeout-sec", type=_positive_float, default=30.0)
+    parser.add_argument("--max-retries", type=_non_negative_int, default=1)
     return parser.parse_args()
 
 
