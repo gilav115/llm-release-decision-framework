@@ -1,26 +1,26 @@
 # Contracts
 
-This document maps implementation modules to stable contracts.
+This document maps implementation modules to stable interfaces the rest of the system depends on.
 
 ## Core contract modules
 
 - `rdf.models`
-  - canonical dataclasses and typed literals for domain objects
+  - canonical dataclasses and typed literals used across modules
   - examples: `ConversationScenario`, `ScenarioRun`, `ReleaseDecision`
 
 - `rdf.adapters.base.AssistantAdapter`
-  - interface between framework and assistant under test
-  - framework should depend only on this contract, not provider SDK specifics
+  - interface between framework runtime and assistant implementation
+  - runner should call this interface rather than provider-specific SDK code
 
 - `rdf.judging.base.Judge`
-  - evaluates completed scenario execution into structured `JudgeResult`
+  - converts one completed scenario run into a structured `JudgeResult`
 
 - `rdf.execution.runner.Runner`
-  - orchestrates scenario execution and collection
-  - intentionally excludes release decision logic
+  - orchestrates scenario execution and collects `ScenarioRun` records
+  - does not contain release decision policy logic
 
 - `rdf.gates.release_gate.ReleaseGate`
-  - converts scenario results into final release outcome
+  - converts scenario run results into final `ReleaseDecision`
 
 ## Error contracts
 
