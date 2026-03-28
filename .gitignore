@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+reports/*
+!reports/.gitkeep
+run_history/*
+!run_history/.gitkeep
