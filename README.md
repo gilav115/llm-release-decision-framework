@@ -57,6 +57,11 @@ Important edge case:
 - `summary.md` — human-readable one-minute summary.
 - `system_events.json` — flattened optional runtime events.
 
+Recent artifact improvements:
+- each response now includes status, response id, latency, provenance, and basic quality hints in `responses[].metadata`
+- each scenario run now includes explicit run status, start/end timestamps, response counts, and aggregate latency metrics
+- `release_decision.json` now includes pass/fail counts, pass rate, and duration rollups
+
 See `docs/run-artifacts.md` for field-level detail.
 
 ## Common failure modes

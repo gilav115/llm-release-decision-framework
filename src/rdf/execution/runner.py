@@ -11,6 +11,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from queue import Queue
 
 from rdf.adapters.base import AssistantAdapter
@@ -41,6 +42,37 @@ class DefaultRunner(Runner):
         self.max_concurrency = max_concurrency
         self.scenario_timeout_sec = scenario_timeout_sec
         self.max_retries = max_retries
+
+    @staticmethod
+    def _utc_now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _decorate_response(
+        self,
+        response: AssistantResponse,
+        scenario: ConversationScenario,
+        turn: ConversationTurn,
+        response_index: int,
+        latency_ms: int,
+    ) -> AssistantResponse:
+        response.response_id = response.response_id or f"{scenario.scenario_id}:response:{response_index}"
+        response.status = "completed"
+
+        message_lower = response.message.lower()
+        response.metadata = {
+            **response.metadata,
+            "status": response.status,
+            "scenario_id": scenario.scenario_id,
+            "turn_id": turn.turn_id,
+            "response_index": response_index,
+            "latency_ms": latency_ms,
+            "adapter_name": self.adapter.__class__.__name__,
+            "message_chars": len(response.message),
+            "contains_actionable_guidance": any(
+                token in message_lower for token in ["contact", "check", "lock", "freeze", "call", "ask", "review"]
+            ),
+        }
+        return response
 
     def _send_turn_with_timeout(
         self,
@@ -86,12 +118,14 @@ class DefaultRunner(Runner):
     def _run_single(self, run_id: str, scenario: ConversationScenario) -> ScenarioRun:
         """Execute one scenario exactly once (no retries)."""
         start = time.perf_counter()
+        started_at_utc = self._utc_now_iso()
         context: object | None = None
         primary_exc: Exception | None = None
         try:
             context = self.adapter.start_conversation(scenario)
             transcript: list[ConversationTurn] = []
             responses = []
+            response_latencies_ms: list[int] = []
 
             for turn in scenario.turns:
                 elapsed = time.perf_counter() - start
@@ -102,11 +136,21 @@ class DefaultRunner(Runner):
 
                 transcript.append(turn)
                 remaining = self.scenario_timeout_sec - elapsed
+                turn_start = time.perf_counter()
                 response = self._send_turn_with_timeout(
                     context=context,
                     turn=turn,
                     remaining_sec=remaining,
                     scenario_id=scenario.scenario_id,
+                )
+                response_latency_ms = max(1, int((time.perf_counter() - turn_start) * 1000))
+                response_latencies_ms.append(response_latency_ms)
+                response = self._decorate_response(
+                    response=response,
+                    scenario=scenario,
+                    turn=turn,
+                    response_index=len(responses) + 1,
+                    latency_ms=response_latency_ms,
                 )
                 responses.append(response)
 
@@ -122,7 +166,8 @@ class DefaultRunner(Runner):
 
             events = self.adapter.collect_system_events(context)
             judge_result = self.judge.evaluate(scenario, transcript, responses, events)
-            duration_ms = int((time.perf_counter() - start) * 1000)
+            duration_ms = max(1, int((time.perf_counter() - start) * 1000))
+            completed_at_utc = self._utc_now_iso()
 
             return ScenarioRun(
                 run_id=run_id,
@@ -132,7 +177,28 @@ class DefaultRunner(Runner):
                 system_events=events,
                 duration_ms=duration_ms,
                 judge_result=judge_result,
-                metadata={"attempt": 1},
+                status="completed",
+                started_at_utc=started_at_utc,
+                completed_at_utc=completed_at_utc,
+                metadata={
+                    "attempt": 1,
+                    "scenario_status": "completed",
+                    "adapter_name": self.adapter.__class__.__name__,
+                    "judge_name": self.judge.__class__.__name__,
+                    "scenario_timeout_sec": self.scenario_timeout_sec,
+                    "max_retries": self.max_retries,
+                    "response_count": len(responses),
+                    "user_turn_count": sum(1 for t in transcript if t.speaker == "user"),
+                    "assistant_turn_count": sum(1 for t in transcript if t.speaker == "assistant"),
+                    "event_count": len(events),
+                    "total_response_latency_ms": sum(response_latencies_ms),
+                    "avg_response_latency_ms": int(sum(response_latencies_ms) / len(response_latencies_ms))
+                    if response_latencies_ms
+                    else 0,
+                    "max_response_latency_ms": max(response_latencies_ms, default=0),
+                    "judge_passed": judge_result.passed,
+                    "overall_score": judge_result.overall_score,
+                },
             )
         except ScenarioTimeoutError as exc:
             primary_exc = exc

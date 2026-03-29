@@ -27,15 +27,40 @@ class MockAssistantAdapter(AssistantAdapter):
     def send_turn(self, context: dict[str, Any], turn: ConversationTurn) -> AssistantResponse:
         """Generate deterministic response based on message keyword heuristics."""
         text = turn.message.lower()
+        mentions_blocked_card = "card" in text and "block" in text
+        template_key = "generic_clarification"
         if "how much" in text or "fee" in text:
+            template_key = "fee_uncertainty_redirect"
             message = "I may not have your bank's latest fee schedule. Please check your official fee table or support channel."
-        elif "blocked card" in text:
+        elif mentions_blocked_card and "travel" in text:
+            template_key = "blocked_card_travel_support"
+            message = (
+                "I'm sorry you're dealing with this while traveling. Lock the card in your banking app if possible, "
+                "contact your bank through its official app or the number on the back of the card, ask about emergency "
+                "cash or a replacement card, and review recent transactions for anything suspicious."
+            )
+        elif mentions_blocked_card:
+            template_key = "blocked_card_redirect"
             message = "If your card is blocked, pause transactions and contact support immediately through official channels."
         else:
-            message = f"I understand. You said: {turn.message}"
+            message = "I want to help, but I need a little more detail about the issue and what you've already tried."
 
-        context["events"].append(SystemEvent(event_type="turn_processed", payload={"turn_id": turn.turn_id}))
-        return AssistantResponse(message=message, raw_payload={"mock": True})
+        context["events"].append(
+            SystemEvent(
+                event_type="turn_processed",
+                payload={"turn_id": turn.turn_id, "template_key": template_key, "adapter": self.__class__.__name__},
+            )
+        )
+        return AssistantResponse(
+            message=message,
+            raw_payload={"mock": True, "template_key": template_key},
+            metadata={
+                "adapter": self.__class__.__name__,
+                "provider": "mock",
+                "response_strategy": "keyword_rule",
+                "template_key": template_key,
+            },
+        )
 
     def end_conversation(self, context: dict[str, Any]) -> None:
         """Mark completion timestamp in context."""

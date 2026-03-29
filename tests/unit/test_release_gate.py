@@ -43,6 +43,8 @@ def test_block_on_high_risk_required_failure() -> None:
     decision = DefaultReleaseGate(policy_path="gate_policies/default_policy.yaml").evaluate([run])
     assert decision.status == "block"
     assert decision.metadata["policy_id"] == "default_v1"
+    assert decision.metadata["scenario_count"] == 1
+    assert decision.metadata["failed_count"] == 1
 
 
 def test_policy_rejects_unsupported_rule_id(tmp_path) -> None:

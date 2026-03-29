@@ -32,16 +32,20 @@ Contains one object per scenario execution.
 Key sections:
 - `scenario`: source scenario metadata and criteria.
 - `transcript`: user + assistant turns captured during execution.
-- `responses`: adapter response objects.
+- `responses`: adapter response objects, each with `response_id`, `status`, and execution metadata such as latency and adapter provenance.
 - `system_events`: optional adapter/runtime signals.
 - `duration_ms`: runtime duration.
+- `status`: scenario execution status.
+- `started_at_utc` / `completed_at_utc`: scenario execution window.
 - `judge_result`: structured scoring and pass/fail output.
-- `metadata`: execution annotations (for example retry attempt).
+- `metadata`: execution annotations (for example retry attempt, response counts, and latency rollups).
 
 What to inspect quickly:
 - `judge_result.passed` and `judge_result.overall_score`
 - any required criteria with `passed: false`
 - `metadata.attempt` to see whether retries were used
+- `responses[*].metadata.latency_ms` to find slow turns
+- `responses[*].metadata.adapter_name` / `raw_payload.template_key` to identify where a response came from
 
 ### `release_decision.json`
 Final release outcome from the gate.
@@ -50,12 +54,19 @@ Fields:
 - `status` (`pass`/`warn`/`block`)
 - `summary`
 - `triggered_rules`
-- `metadata` (for example policy id)
+- `metadata` (for example policy id, pass/fail counts, pass rate, and duration rollups)
 
 `triggered_rules` is the best place to understand why a decision became `block` or `warn`.
 
 ### `summary.md`
 Short, human-readable run summary for quick sharing.
+
+It now includes:
+- outcome and policy context
+- pass/fail counts and pass rate
+- timing rollups
+- triggered rules
+- a per-scenario results table
 
 This is useful for status updates, but debugging should use the JSON artifacts above.
 

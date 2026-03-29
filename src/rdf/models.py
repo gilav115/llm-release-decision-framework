@@ -13,6 +13,8 @@ from typing import Any, Literal
 RiskLevel = Literal["low", "medium", "high"]
 Speaker = Literal["user", "assistant"]
 DecisionStatus = Literal["pass", "warn", "block"]
+ResponseStatus = Literal["completed", "error", "timeout"]
+ScenarioStatus = Literal["completed", "failed", "timeout"]
 
 
 @dataclass
@@ -68,6 +70,8 @@ class AssistantResponse:
     """Normalized assistant output returned by adapters."""
 
     message: str
+    response_id: str = ""
+    status: ResponseStatus = "completed"
     raw_payload: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -113,6 +117,9 @@ class ScenarioRun:
     system_events: list[SystemEvent]
     duration_ms: int
     judge_result: JudgeResult | None = None
+    status: ScenarioStatus = "completed"
+    started_at_utc: str = ""
+    completed_at_utc: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

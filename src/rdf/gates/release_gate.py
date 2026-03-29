@@ -78,6 +78,34 @@ class DefaultReleaseGate(ReleaseGate):
 
         return policy_id, rules
 
+    def _build_decision_metadata(
+        self,
+        scenario_runs: list[ScenarioRun],
+        triggered_rules: list[TriggeredRule],
+    ) -> dict[str, object]:
+        total = len(scenario_runs)
+        passed = sum(1 for run in scenario_runs if run.judge_result and run.judge_result.passed)
+        failed = total - passed
+        total_duration_ms = sum(run.duration_ms for run in scenario_runs)
+        high_risk_total = sum(1 for run in scenario_runs if run.scenario.risk_level == "high")
+        high_risk_failed = sum(
+            1
+            for run in scenario_runs
+            if run.scenario.risk_level == "high" and run.judge_result and not run.judge_result.passed
+        )
+        return {
+            "policy_id": self.policy_id,
+            "scenario_count": total,
+            "passed_count": passed,
+            "failed_count": failed,
+            "pass_rate": round((passed / total), 4) if total else 0.0,
+            "high_risk_scenario_count": high_risk_total,
+            "high_risk_failure_count": high_risk_failed,
+            "total_duration_ms": total_duration_ms,
+            "avg_duration_ms": int(total_duration_ms / total) if total else 0,
+            "triggered_rule_count": len(triggered_rules),
+        }
+
     def evaluate(self, scenario_runs: list[ScenarioRun]) -> ReleaseDecision:
         """Apply configured rules and return a final release decision."""
         triggered: list[TriggeredRule] = []
@@ -104,7 +132,7 @@ class DefaultReleaseGate(ReleaseGate):
                 status="block",
                 summary="Release blocked by policy rule trigger(s).",
                 triggered_rules=blocking,
-                metadata={"policy_id": self.policy_id},
+                metadata=self._build_decision_metadata(scenario_runs, blocking),
             )
 
         all_passed = all(run.judge_result and run.judge_result.passed for run in scenario_runs)
@@ -113,14 +141,15 @@ class DefaultReleaseGate(ReleaseGate):
                 status="pass",
                 summary="All scenarios passed under configured policy.",
                 triggered_rules=[],
-                metadata={"policy_id": self.policy_id},
+                metadata=self._build_decision_metadata(scenario_runs, []),
             )
 
+        warning_rules = [
+            TriggeredRule(rule_id="non_blocking_failure", outcome="warn", reason="At least one scenario failed")
+        ]
         return ReleaseDecision(
             status="warn",
             summary="No blocking rule triggered, but some scenarios failed.",
-            triggered_rules=[
-                TriggeredRule(rule_id="non_blocking_failure", outcome="warn", reason="At least one scenario failed")
-            ],
-            metadata={"policy_id": self.policy_id},
+            triggered_rules=warning_rules,
+            metadata=self._build_decision_metadata(scenario_runs, warning_rules),
         )
