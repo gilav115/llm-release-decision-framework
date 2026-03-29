@@ -216,12 +216,46 @@ class DefaultRunner(Runner):
                             f"Scenario {scenario.scenario_id} failed during cleanup"
                         ) from exc
 
+    def _build_error_run(
+        self,
+        run_id: str,
+        scenario: ConversationScenario,
+        attempt: int,
+        exc: Exception,
+        duration_ms: int,
+    ) -> ScenarioRun:
+        """Build a failed scenario record instead of raising."""
+        return ScenarioRun(
+            run_id=run_id,
+            scenario=scenario,
+            transcript=[],
+            responses=[],
+            system_events=[],
+            duration_ms=duration_ms,
+            judge_result=None,
+            metadata={
+                "attempt": attempt,
+                "status": "error",
+                "error_type": exc.__class__.__name__,
+                "error_message": str(exc),
+                "turns_executed": 0,
+                "turn_durations_ms": [],
+            },
+        )
+
     def _run_with_retries(self, run_id: str, scenario: ConversationScenario) -> ScenarioRun:
-        """Retry transient adapter failures up to `max_retries` times."""
+        """Retry transient adapter failures up to `max_retries` times.
+
+        Returns a failed ScenarioRun if retries are exhausted.
+        """
+        started = time.perf_counter()
         last_exc: Exception | None = None
+        last_attempt = 1
         for attempt in range(1, self.max_retries + 2):
+            last_attempt = attempt
             try:
                 run = self._run_single(run_id, scenario)
+                run.metadata["status"] = "completed"
                 run.metadata["attempt"] = attempt
                 return run
             except ScenarioTimeoutError as exc:
@@ -233,14 +267,33 @@ class DefaultRunner(Runner):
                 if attempt > self.max_retries:
                     break
         assert last_exc is not None
-        raise last_exc
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return self._build_error_run(
+            run_id=run_id,
+            scenario=scenario,
+            attempt=last_attempt,
+            exc=last_exc,
+            duration_ms=duration_ms,
+        )
 
     def run(self, scenarios: list[ConversationScenario]) -> list[ScenarioRun]:
         """Run scenarios in parallel with bounded worker count."""
         run_id = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         results: list[ScenarioRun] = []
         with ThreadPoolExecutor(max_workers=self.max_concurrency) as executor:
-            futures = [executor.submit(self._run_with_retries, run_id, s) for s in scenarios]
-            for future in as_completed(futures):
-                results.append(future.result())
+            future_to_scenario = {executor.submit(self._run_with_retries, run_id, s): s for s in scenarios}
+            for future in as_completed(future_to_scenario):
+                scenario = future_to_scenario[future]
+                try:
+                    results.append(future.result())
+                except Exception as exc:  # pragma: no cover - defensive fallback.
+                    results.append(
+                        self._build_error_run(
+                            run_id=run_id,
+                            scenario=scenario,
+                            attempt=1,
+                            exc=exc,
+                            duration_ms=0,
+                        )
+                    )
         return sorted(results, key=lambda r: r.scenario.scenario_id)

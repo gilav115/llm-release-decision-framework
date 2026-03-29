@@ -1,6 +1,6 @@
 # Gate Policies Directory
 
-This folder contains release gate policy definitions.
+This folder contains policy files used to produce final run decisions.
 
 ## File format
 
@@ -23,3 +23,4 @@ Policies use `.yaml` extension and are authored as JSON-formatted YAML for compa
 
 - If a `rule_id` in policy does not match a supported rule in code, policy load fails with `ValueError`.
 - If `outcome` is not one of `pass`, `warn`, `block`, policy load fails with `ValueError`.
+- If `rules` is missing or empty, policy load fails with `ValueError`.

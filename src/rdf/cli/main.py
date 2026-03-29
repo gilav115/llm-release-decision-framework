@@ -7,13 +7,15 @@ executes a run, and writes artifacts. It does not contain decision logic.
 from __future__ import annotations
 
 import argparse
+import time
 
 from rdf.adapters.mock_assistant import MockAssistantAdapter
 from rdf.execution.runner import DefaultRunner
 from rdf.gates.release_gate import DefaultReleaseGate
 from rdf.judging.llm_judge import RuleBasedJudge
+from rdf.models import ReleaseDecision, TriggeredRule
 from rdf.reporting.report_builder import ReportBuilder
-from rdf.scenarios.loader import load_scenarios
+from rdf.scenarios.loader import load_scenarios_with_errors
 from rdf.storage.filesystem import FilesystemStorage
 
 
@@ -51,10 +53,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    run_started = time.perf_counter()
     args = parse_args()
 
-    # 1) Load scenarios from disk.
-    scenarios = load_scenarios(args.scenarios)
+    # 1) Load scenarios from disk in tolerant mode.
+    scenarios, load_errors = load_scenarios_with_errors(args.scenarios)
 
     # 2) Build execution stack (adapter + judge + runner).
     adapter = MockAssistantAdapter()
@@ -69,14 +72,54 @@ def main() -> None:
 
     # 3) Execute scenarios.
     scenario_runs = runner.run(scenarios)
+    execution_errors = [
+        {
+            "stage": "execution",
+            "scenario_id": run.scenario.scenario_id,
+            "error_type": run.metadata.get("error_type", "UnknownError"),
+            "error_message": run.metadata.get("error_message", ""),
+            "attempt": run.metadata.get("attempt", 1),
+        }
+        for run in scenario_runs
+        if run.metadata.get("status") == "error"
+    ]
+    run_errors = [*load_errors, *execution_errors]
 
     # 4) Evaluate release gate.
     gate = DefaultReleaseGate(policy_path=args.policy)
     decision = gate.evaluate(scenario_runs)
+    if load_errors:
+        load_trigger = TriggeredRule(
+            rule_id="scenario_load_error",
+            outcome="block",
+            reason=f"{len(load_errors)} scenario file(s) failed to load",
+        )
+        if decision.status == "block":
+            decision.triggered_rules.append(load_trigger)
+            decision.summary = f"{decision.summary} Scenario load errors detected."
+            decision.metadata["load_errors"] = len(load_errors)
+        else:
+            decision = ReleaseDecision(
+                status="block",
+                summary="Release blocked: one or more scenario files failed to load.",
+                triggered_rules=[load_trigger],
+                metadata={**decision.metadata, "load_errors": len(load_errors)},
+            )
 
     # 5) Build human-readable summary.
     builder = ReportBuilder()
-    summary = builder.build_summary_markdown(scenario_runs, decision)
+    total_execution_ms = int((time.perf_counter() - run_started) * 1000)
+    run_stats = builder.build_run_stats(
+        scenario_runs=scenario_runs,
+        run_errors=run_errors,
+        total_execution_ms=total_execution_ms,
+    )
+    summary = builder.build_summary_markdown(
+        scenario_runs,
+        decision,
+        run_errors=run_errors,
+        total_execution_ms=total_execution_ms,
+    )
 
     # 6) Persist run artifacts.
     storage = FilesystemStorage()
@@ -96,6 +139,8 @@ def main() -> None:
         scenario_runs=scenario_runs,
         release_decision=decision,
         summary_markdown=summary,
+        run_errors=run_errors,
+        run_stats=run_stats,
     )
 
     print(f"Run complete. Decision: {decision.status}")

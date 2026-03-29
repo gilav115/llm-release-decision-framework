@@ -1,6 +1,6 @@
 # Repository Structure
 
-This repository is organized for clarity and teaching value.
+This page explains what each top-level folder is for.
 
 ## Top-level intent
 
@@ -24,8 +24,8 @@ This repository is organized for clarity and teaching value.
 
 ## Documentation responsibilities
 
-- `system-overview.md`: architecture and flow.
-- `contracts.md`: stable interfaces and models.
-- `run-artifacts.md`: persisted output schema and intent.
-- `scenario-and-policy-authoring.md`: how to write inputs.
-- `examples/sample-report.md`: expected summary style.
+- `system-overview.md`: end-to-end flow.
+- `contracts.md`: shared interfaces and models.
+- `run-artifacts.md`: run output files and how to read them.
+- `scenario-and-policy-authoring.md`: how to author scenario/policy files.
+- `examples/sample-report.md`: sample summary format.
