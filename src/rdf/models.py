@@ -70,10 +70,10 @@ class AssistantResponse:
     """Normalized assistant output returned by adapters."""
 
     message: str
-    response_id: str = ""
-    status: ResponseStatus = "completed"
     raw_payload: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    response_id: str = ""
+    status: ResponseStatus = "completed"
 
 
 @dataclass
@@ -117,10 +117,10 @@ class ScenarioRun:
     system_events: list[SystemEvent]
     duration_ms: int
     judge_result: JudgeResult | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     status: ScenarioStatus = "completed"
     started_at_utc: str = ""
     completed_at_utc: str = ""
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
