@@ -96,45 +96,73 @@ class ReportBuilder:
     ) -> str:
         """Create one-page style summary with key release metrics."""
         run_errors = run_errors or []
-        total = len(scenario_runs)
-        high_risk_failed = sum(
-            1
-            for r in scenario_runs
-            if r.scenario.risk_level == "high" and r.judge_result and not r.judge_result.passed
-        )
         stats = self.build_run_stats(
             scenario_runs=scenario_runs,
             run_errors=run_errors,
             total_execution_ms=total_execution_ms,
         )
-        counts = stats["counts"]
-        rates = stats["rates"]
-        perf = stats["performance"]
-        scenario_perf = perf["scenario_execution_ms"]
-        question_perf = perf["question_execution_ms"]
+        total = len(scenario_runs)
+        passed = stats["counts"]["scenarios_passed"]
+        failed = stats["counts"]["scenarios_failed"]
+        high_risk_failed = sum(
+            1
+            for r in scenario_runs
+            if r.scenario.risk_level == "high" and r.judge_result and not r.judge_result.passed
+        )
+        pass_rate = stats["rates"]["success_rate_loaded_pct"] / 100 if total else 0.0
+        total_duration_ms = stats["performance"]["total_execution_ms"] or sum(r.duration_ms for r in scenario_runs)
+        avg_duration_ms = int(stats["performance"]["scenario_execution_ms"]["avg_ms"]) if total else 0
+        slowest = max(scenario_runs, key=lambda run: run.duration_ms, default=None)
 
         lines = [
             "# Release Decision Summary",
             "",
-            f"- Scenarios evaluated: {total}",
-            f"- Passed: {counts['scenarios_passed']}",
-            f"- Failed: {counts['scenarios_failed']}",
-            f"- Errored: {counts['scenarios_errored']}",
-            f"- Load errors: {counts['load_errors']}",
-            f"- High-risk failures: {high_risk_failed}",
+            "## Outcome",
             "",
-            "## Rates",
-            f"- Success rate (loaded scenarios): {rates['success_rate_loaded_pct']}%",
-            f"- Failure rate (loaded scenarios): {rates['failure_rate_loaded_pct']}%",
-            f"- Load error rate (all scenario inputs): {rates['load_error_rate_input_pct']}%",
-            f"- Scenario throughput: {rates['scenarios_per_second']} scenarios/sec",
-            f"- Question throughput: {rates['turns_per_second']} questions/sec",
-            "",
-            "## Performance",
-            f"- Total execution time: {perf['total_execution_ms']} ms",
-            f"- Conversation execution (avg/p50/p95): {scenario_perf['avg_ms']} / {scenario_perf['p50_ms']} / {scenario_perf['p95_ms']} ms",
-            f"- Question execution (avg/p50/p95): {question_perf['avg_ms']} / {question_perf['p50_ms']} / {question_perf['p95_ms']} ms",
             f"- Final decision: **{decision.status}**",
             f"- Summary: {decision.summary}",
+            f"- Policy: `{decision.metadata.get('policy_id', 'unknown')}`",
+            f"- Scenarios evaluated: {total}",
+            f"- Passed: {passed}",
+            f"- Failed: {failed}",
+            f"- Pass rate: {pass_rate:.1%}",
+            f"- High-risk failures: {high_risk_failed}",
+            "",
+            "## Timing",
+            "",
+            f"- Total runtime across scenarios: {int(total_duration_ms)} ms",
+            f"- Average scenario duration: {avg_duration_ms} ms",
+            f"- Slowest scenario: `{slowest.scenario.scenario_id}` ({slowest.duration_ms} ms)" if slowest else "- Slowest scenario: n/a",
+            "",
+            "## Rates",
+            "",
+            f"- Scenario success rate: {stats['rates']['success_rate_loaded_pct']:.2f}%",
+            f"- Scenario failure rate: {stats['rates']['failure_rate_loaded_pct']:.2f}%",
+            f"- Load error rate: {stats['rates']['load_error_rate_input_pct']:.2f}%",
+            f"- Scenarios per second: {stats['rates']['scenarios_per_second']:.4f}",
+            f"- Turns per second: {stats['rates']['turns_per_second']:.4f}",
+            "",
+            "## Performance",
+            "",
+            f"- Scenario duration p50: {stats['performance']['scenario_execution_ms']['p50_ms']:.0f} ms",
+            f"- Scenario duration p95: {stats['performance']['scenario_execution_ms']['p95_ms']:.0f} ms",
+            f"- Turn duration p50: {stats['performance']['question_execution_ms']['p50_ms']:.0f} ms",
+            f"- Turn duration p95: {stats['performance']['question_execution_ms']['p95_ms']:.0f} ms",
         ]
+
+        if decision.triggered_rules:
+            lines.extend(["", "## Triggered Rules", ""])
+            for rule in decision.triggered_rules:
+                lines.append(f"- `{rule.rule_id}` ({rule.outcome}): {rule.reason}")
+
+        lines.extend(["", "## Scenario Results", "", "| Scenario | Risk | Status | Score | Duration | Attempt | Response Source |", "| --- | --- | --- | --- | --- | --- | --- |"])
+        for run in scenario_runs:
+            judge_status = "pass" if run.judge_result and run.judge_result.passed else "fail"
+            score = f"{run.judge_result.overall_score:.2f}" if run.judge_result else "n/a"
+            attempt = run.metadata.get("attempt", "n/a")
+            response_source = run.metadata.get("adapter_name", "unknown")
+            lines.append(
+                f"| `{run.scenario.scenario_id}` | {run.scenario.risk_level} | {judge_status} | "
+                f"{score} | {run.duration_ms} ms | {attempt} | {response_source} |"
+            )
         return "\n".join(lines)

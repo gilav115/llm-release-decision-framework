@@ -68,6 +68,11 @@ If no scenario `.yaml` files are found, CLI records a load error in `run_errors.
 - `run_errors.json` — load-time and execution-time errors captured during the run.
 - `run_stats.json` — structured performance and rate metrics for the run.
 
+Recent artifact improvements:
+- each response now includes status, response id, latency, provenance, and basic quality hints in `responses[].metadata`
+- each scenario run now includes explicit run status, start/end timestamps, response counts, and aggregate latency metrics
+- `release_decision.json` now includes pass/fail counts, pass rate, and duration rollups
+
 See `docs/run-artifacts.md` for field-level detail.
 
 ## Common failure modes
