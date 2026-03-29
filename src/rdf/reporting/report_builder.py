@@ -96,15 +96,22 @@ class ReportBuilder:
     ) -> str:
         """Create one-page style summary with key release metrics."""
         run_errors = run_errors or []
+        stats = self.build_run_stats(
+            scenario_runs=scenario_runs,
+            run_errors=run_errors,
+            total_execution_ms=total_execution_ms,
+        )
         total = len(scenario_runs)
+        passed = stats["counts"]["scenarios_passed"]
+        failed = stats["counts"]["scenarios_failed"]
         high_risk_failed = sum(
             1
             for r in scenario_runs
             if r.scenario.risk_level == "high" and r.judge_result and not r.judge_result.passed
         )
-        pass_rate = (passed / total) if total else 0.0
-        total_duration_ms = sum(r.duration_ms for r in scenario_runs)
-        avg_duration_ms = int(total_duration_ms / total) if total else 0
+        pass_rate = stats["rates"]["success_rate_loaded_pct"] / 100 if total else 0.0
+        total_duration_ms = stats["performance"]["total_execution_ms"] or sum(r.duration_ms for r in scenario_runs)
+        avg_duration_ms = int(stats["performance"]["scenario_execution_ms"]["avg_ms"]) if total else 0
         slowest = max(scenario_runs, key=lambda run: run.duration_ms, default=None)
 
         lines = [
@@ -123,9 +130,24 @@ class ReportBuilder:
             "",
             "## Timing",
             "",
-            f"- Total runtime across scenarios: {total_duration_ms} ms",
+            f"- Total runtime across scenarios: {int(total_duration_ms)} ms",
             f"- Average scenario duration: {avg_duration_ms} ms",
             f"- Slowest scenario: `{slowest.scenario.scenario_id}` ({slowest.duration_ms} ms)" if slowest else "- Slowest scenario: n/a",
+            "",
+            "## Rates",
+            "",
+            f"- Scenario success rate: {stats['rates']['success_rate_loaded_pct']:.2f}%",
+            f"- Scenario failure rate: {stats['rates']['failure_rate_loaded_pct']:.2f}%",
+            f"- Load error rate: {stats['rates']['load_error_rate_input_pct']:.2f}%",
+            f"- Scenarios per second: {stats['rates']['scenarios_per_second']:.4f}",
+            f"- Turns per second: {stats['rates']['turns_per_second']:.4f}",
+            "",
+            "## Performance",
+            "",
+            f"- Scenario duration p50: {stats['performance']['scenario_execution_ms']['p50_ms']:.0f} ms",
+            f"- Scenario duration p95: {stats['performance']['scenario_execution_ms']['p95_ms']:.0f} ms",
+            f"- Turn duration p50: {stats['performance']['question_execution_ms']['p50_ms']:.0f} ms",
+            f"- Turn duration p95: {stats['performance']['question_execution_ms']['p95_ms']:.0f} ms",
         ]
 
         if decision.triggered_rules:
